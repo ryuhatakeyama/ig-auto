@@ -24,7 +24,8 @@ def find_accounts():
     found = {}
     def get(path, **p):
         try: return call("GET", path, **p)
-        except SystemExit: return {}
+        except SystemExit as e:
+            print(f"  ({path}: {str(e)[:200]})"); return {}
     for pg in get("me/accounts", fields="name,instagram_business_account{id,username}").get("data", []):
         ig = pg.get("instagram_business_account")
         if ig: found[ig["id"]] = ig.get("username", "")
@@ -46,6 +47,9 @@ def wait_ready(cid):
 def main():
     global UID
     if len(sys.argv) > 1 and sys.argv[1] == "check":
+        if UID:
+            print("IG_USER_ID で確認:", call("GET", UID, fields="id,username"))
+            return
         accts = find_accounts()
         print("投稿できるInstagramアカウント:", accts or "見つかりません（トークンの権限・割り当てを確認）")
         return
