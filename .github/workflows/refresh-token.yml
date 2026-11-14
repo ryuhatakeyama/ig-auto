@@ -1,0 +1,16 @@
+name: アクセストークンを更新する
+on:
+  schedule:
+    - cron: "13 1 1,15 * *"   # 毎月1日と15日
+  workflow_dispatch:
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: トークンを延長して保存し直す
+        env:
+          OLD: ${{ secrets.IG_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          NEW=$(curl -s "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=$OLD" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          gh secret set IG_ACCESS_TOKEN --body "$NEW" --repo "$GITHUB_REPOSITORY"
