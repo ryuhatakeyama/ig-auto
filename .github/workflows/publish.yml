@@ -3,6 +3,10 @@ on:
   schedule:
     - cron: "7 22 * * *"   # 毎日 日本時間 7:07
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = 接続確認だけ（投稿しない） / 空欄 = 今日の分を投稿"
+        default: "check"
 permissions:
   contents: write
 jobs:
@@ -12,11 +16,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: python scripts/publish.py
+      - run: python scripts/publish.py ${{ github.event.inputs.mode }}
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           PAGES_BASE: ${{ vars.PAGES_BASE }}
+          IG_API_HOST: ${{ vars.IG_API_HOST }}
       - run: |
           git config user.name "auto-publish" && git config user.email "actions@github.com"
           git add content && (git diff --cached --quiet || git commit -m "投稿済みに移動") && git push

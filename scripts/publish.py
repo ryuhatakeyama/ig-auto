@@ -1,10 +1,13 @@
 """今日（日本時間）の投稿を Instagram にカルーセルで投稿する。
-必要な環境変数: IG_USER_ID, IG_ACCESS_TOKEN, PAGES_BASE（例 https://ユーザー名.github.io/リポジトリ名）"""
+必要な環境変数: IG_ACCESS_TOKEN, PAGES_BASE（例 https://ユーザー名.github.io/リポジトリ名）
+任意: IG_USER_ID（未設定なら自動で探す）, IG_API_HOST（既定 graph.facebook.com。Instagramログインのトークンなら graph.instagram.com）"""
 import os, json, time, datetime, pathlib, shutil, sys, urllib.request, urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = "https://graph.instagram.com/v23.0"
-UID, TOKEN, BASE = os.environ["IG_USER_ID"], os.environ["IG_ACCESS_TOKEN"], os.environ["PAGES_BASE"].rstrip("/")
+API = f"https://{os.environ.get('IG_API_HOST') or 'graph.facebook.com'}/v23.0"
+TOKEN = os.environ["IG_ACCESS_TOKEN"]
+BASE = os.environ.get("PAGES_BASE", "").rstrip("/")
+UID = os.environ.get("IG_USER_ID", "")
 
 def call(method, path, **params):
     params["access_token"] = TOKEN
@@ -16,6 +19,24 @@ def call(method, path, **params):
     except urllib.error.HTTPError as e:
         sys.exit(f"API error {e.code}: {e.read().decode()}")
 
+def find_accounts():
+    """このトークンで投稿できる Instagram アカウントを探す"""
+    found = {}
+    def get(path, **p):
+        try: return call("GET", path, **p)
+        except SystemExit: return {}
+    for pg in get("me/accounts", fields="name,instagram_business_account{id,username}").get("data", []):
+        ig = pg.get("instagram_business_account")
+        if ig: found[ig["id"]] = ig.get("username", "")
+    for b in get("me/businesses", fields="id,name").get("data", []):
+        for edge in ("owned_instagram_accounts", "instagram_accounts"):
+            for ig in get(f"{b['id']}/{edge}", fields="id,username").get("data", []):
+                found[ig["id"]] = ig.get("username", "")
+    if not found and "graph.instagram.com" in API:
+        me = get("me", fields="user_id,username")
+        if me: found[me.get("user_id") or me.get("id")] = me.get("username", "")
+    return found
+
 def wait_ready(cid):
     for _ in range(30):
         if call("GET", cid, fields="status_code").get("status_code") == "FINISHED": return
@@ -23,6 +44,15 @@ def wait_ready(cid):
     sys.exit(f"container {cid} not ready")
 
 def main():
+    global UID
+    if len(sys.argv) > 1 and sys.argv[1] == "check":
+        accts = find_accounts()
+        print("投稿できるInstagramアカウント:", accts or "見つかりません（トークンの権限・割り当てを確認）")
+        return
+    if not UID:
+        accts = find_accounts()
+        if len(accts) != 1: sys.exit(f"Instagramアカウントを特定できません: {accts}。IG_USER_ID を登録してください")
+        UID = next(iter(accts))
     today = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
     f = ROOT / "content" / "queue" / f"{today}.json"
     if not f.exists():

@@ -1,7 +1,6 @@
 name: アクセストークンを更新する
+# システムユーザーのトークン（無期限）を使う場合は不要。Instagramログインのトークン（60日）に切り替えたときだけ schedule を戻す
 on:
-  schedule:
-    - cron: "13 1 1,15 * *"   # 毎月1日と15日
   workflow_dispatch:
 jobs:
   refresh:
