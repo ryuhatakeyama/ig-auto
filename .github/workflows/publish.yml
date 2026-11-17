@@ -1,7 +1,10 @@
 name: Instagramに投稿する
 on:
   schedule:
-    - cron: "7 22 * * *"   # 毎日 日本時間 7:07
+    # GitHubの定時実行は数時間遅れることがあるため、早めの時刻から3回試す（投稿済みなら何もしない）
+    - cron: "17 20 * * *"   # 日本時間 5:17
+    - cron: "47 22 * * *"   # 日本時間 7:47
+    - cron: "37 1 * * *"    # 日本時間 10:37
   workflow_dispatch:
     inputs:
       mode:
@@ -22,6 +25,7 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           PAGES_BASE: ${{ vars.PAGES_BASE }}
           IG_API_HOST: ${{ vars.IG_API_HOST }}
-      - run: |
+      - if: always()
+        run: |
           git config user.name "auto-publish" && git config user.email "actions@github.com"
           git add content && (git diff --cached --quiet || git commit -m "投稿済みに移動") && git push

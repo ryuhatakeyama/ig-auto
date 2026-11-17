@@ -17,7 +17,9 @@ def call(method, path, **params):
     try:
         with urllib.request.urlopen(req, timeout=60) as r: return json.load(r)
     except urllib.error.HTTPError as e:
-        sys.exit(f"API error {e.code}: {e.read().decode()}")
+        msg = f"API error {e.code}: {e.read().decode()[:500]}"
+        print(f"::error::{msg}")
+        sys.exit(msg)
 
 def find_accounts():
     """このトークンで投稿できる Instagram アカウントを探す"""
@@ -55,15 +57,24 @@ def main():
         return
     if not UID:
         accts = find_accounts()
-        if len(accts) != 1: sys.exit(f"Instagramアカウントを特定できません: {accts}。IG_USER_ID を登録してください")
+        if len(accts) != 1: print("::error::Instagramアカウントを特定できません"); sys.exit(f"Instagramアカウントを特定できません: {accts}。IG_USER_ID を登録してください")
         UID = next(iter(accts))
     today = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
     f = ROOT / "content" / "queue" / f"{today}.json"
     if not f.exists():
         print("今日の投稿はありません", today); return
     post = json.loads(f.read_text())
+    # 二重投稿の防止：直近の投稿に同じキャプションがあれば投稿済みとみなす
+    head = post["caption"][:40]
+    recent = call("GET", f"{UID}/media", fields="caption,timestamp", limit="5").get("data", [])
+    if any((m.get("caption") or "").startswith(head) for m in recent):
+        print("すでに投稿済みです", today)
+        (ROOT / "content" / "posted").mkdir(parents=True, exist_ok=True)
+        shutil.move(str(f), ROOT / "content" / "posted" / f.name)
+        return
     n = len(post["slides"])
-    if not 2 <= n <= 10: sys.exit("カルーセルは2〜10枚にしてください")
+    if not 2 <= n <= 10:
+        print("::error::カルーセルは2〜10枚にしてください"); sys.exit(1)
     children = []
     for i in range(1, n + 1):
         url = f"{BASE}/img/{today}/{i:02d}.jpg"
@@ -74,6 +85,7 @@ def main():
     wait_ready(car)
     res = call("POST", f"{UID}/media_publish", creation_id=car)
     print("投稿しました", today, res)
+    (ROOT / "content" / "posted").mkdir(parents=True, exist_ok=True)
     shutil.move(str(f), ROOT / "content" / "posted" / f.name)
 
 if __name__ == "__main__":
